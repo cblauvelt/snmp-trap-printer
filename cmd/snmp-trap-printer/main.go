@@ -19,7 +19,7 @@ func main() {
 
 	var formatter output.Formatter
 	switch cfg.Output {
-	case "json":
+	case config.OutputJSON:
 		formatter = output.NewJSONFormatter()
 	default:
 		formatter = output.NewHumanFormatter()
