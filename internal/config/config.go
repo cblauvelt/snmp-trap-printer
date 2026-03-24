@@ -2,17 +2,26 @@ package config
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"strings"
 
 	"github.com/gosnmp/gosnmp"
 )
 
+// OutputFormat is the output format for trap printing.
+type OutputFormat string
+
+const (
+	OutputHuman OutputFormat = "human"
+	OutputJSON  OutputFormat = "json"
+)
+
 // Config holds all runtime configuration derived from CLI flags and environment variables.
 type Config struct {
 	Address  string
 	Port     uint16
-	Output   string
+	Output   OutputFormat
 	MIBPaths []string
 
 	// SNMPv3 credentials from environment variables
@@ -41,15 +50,26 @@ func Parse() *Config {
 
 	var mibPaths mibPathList
 	var port uint
+	var output string
 
 	flag.StringVar(&cfg.Address, "address", "0.0.0.0", "Bind address")
 	flag.UintVar(&port, "port", 162, "UDP port")
-	flag.StringVar(&cfg.Output, "output", "human", "Output format: human or json")
+	flag.StringVar(&output, "output", "human", "Output format: human or json")
 	flag.Var(&mibPaths, "mib-path", "Extra MIB directory (repeatable)")
 	flag.Parse()
 
 	cfg.Port = uint16(port)
 	cfg.MIBPaths = mibPaths
+	cfg.Output = OutputFormat(output)
+
+	switch cfg.Output {
+	case OutputHuman, OutputJSON:
+		// valid
+	default:
+		fmt.Fprintf(flag.CommandLine.Output(), "invalid --output %q: must be \"human\" or \"json\"\n\n", output)
+		flag.Usage()
+		os.Exit(2)
+	}
 
 	cfg.V3Username = os.Getenv("SNMP_V3_USERNAME")
 	cfg.V3AuthPassword = os.Getenv("SNMP_V3_AUTH_PASSWORD")
