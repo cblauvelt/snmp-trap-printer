@@ -4,6 +4,8 @@ import (
 	"os"
 	"os/exec"
 	"testing"
+
+	"github.com/gosnmp/gosnmp"
 )
 
 func TestMibPathList(t *testing.T) {
@@ -114,5 +116,126 @@ func TestParseMIBPaths(t *testing.T) {
 	cmd.Env = append(os.Environ(), "TEST_PARSE_MIB_PATHS=1")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("subprocess failed: %v\n%s", err, out)
+	}
+}
+
+func TestLoadV3ConfigNoUsername(t *testing.T) {
+	cfg, err := LoadV3Config()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Username != "" {
+		t.Fatalf("expected empty username, got %q", cfg.Username)
+	}
+	if got := cfg.SecurityLevel(); got != gosnmp.NoAuthNoPriv {
+		t.Fatalf("security level: got %v, want NoAuthNoPriv", got)
+	}
+}
+
+func TestLoadV3ConfigUsernameOnly(t *testing.T) {
+	t.Setenv("SNMP_V3_USERNAME", "trapuser")
+
+	cfg, err := LoadV3Config()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Username != "trapuser" {
+		t.Fatalf("username: got %q, want trapuser", cfg.Username)
+	}
+	if got := cfg.SecurityLevel(); got != gosnmp.NoAuthNoPriv {
+		t.Fatalf("security level: got %v, want NoAuthNoPriv", got)
+	}
+}
+
+func TestLoadV3ConfigAuthNoPriv(t *testing.T) {
+	t.Setenv("SNMP_V3_USERNAME", "trapuser")
+	t.Setenv("SNMP_V3_AUTH_PROTOCOL", "SHA256")
+	t.Setenv("SNMP_V3_AUTH_PASSWORD", "authpass123")
+
+	cfg, err := LoadV3Config()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.AuthProtocol != gosnmp.SHA256 {
+		t.Fatalf("auth protocol: got %v, want SHA256", cfg.AuthProtocol)
+	}
+	if got := cfg.SecurityLevel(); got != gosnmp.AuthNoPriv {
+		t.Fatalf("security level: got %v, want AuthNoPriv", got)
+	}
+}
+
+func TestLoadV3ConfigAuthPriv(t *testing.T) {
+	t.Setenv("SNMP_V3_USERNAME", "trapuser")
+	t.Setenv("SNMP_V3_AUTH_PROTOCOL", "SHA256")
+	t.Setenv("SNMP_V3_AUTH_PASSWORD", "authpass123")
+	t.Setenv("SNMP_V3_PRIV_PROTOCOL", "AES")
+	t.Setenv("SNMP_V3_PRIV_PASSWORD", "privpass123")
+
+	cfg, err := LoadV3Config()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.AuthProtocol != gosnmp.SHA256 {
+		t.Fatalf("auth protocol: got %v, want SHA256", cfg.AuthProtocol)
+	}
+	if cfg.PrivProtocol != gosnmp.AES {
+		t.Fatalf("priv protocol: got %v, want AES", cfg.PrivProtocol)
+	}
+	if got := cfg.SecurityLevel(); got != gosnmp.AuthPriv {
+		t.Fatalf("security level: got %v, want AuthPriv", got)
+	}
+}
+
+func TestLoadV3ConfigInvalidAuthProtocol(t *testing.T) {
+	t.Setenv("SNMP_V3_USERNAME", "trapuser")
+	t.Setenv("SNMP_V3_AUTH_PROTOCOL", "BADVAL")
+
+	cfg, err := LoadV3Config()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.AuthProtocol != gosnmp.NoAuth {
+		t.Fatalf("auth protocol: got %v, want NoAuth", cfg.AuthProtocol)
+	}
+	if got := cfg.SecurityLevel(); got != gosnmp.NoAuthNoPriv {
+		t.Fatalf("security level: got %v, want NoAuthNoPriv", got)
+	}
+}
+
+func TestLoadV3ConfigInvalidPrivProtocol(t *testing.T) {
+	t.Setenv("SNMP_V3_USERNAME", "trapuser")
+	t.Setenv("SNMP_V3_AUTH_PROTOCOL", "SHA")
+	t.Setenv("SNMP_V3_AUTH_PASSWORD", "authpass123")
+	t.Setenv("SNMP_V3_PRIV_PROTOCOL", "BADVAL")
+
+	cfg, err := LoadV3Config()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.PrivProtocol != gosnmp.NoPriv {
+		t.Fatalf("priv protocol: got %v, want NoPriv", cfg.PrivProtocol)
+	}
+	if got := cfg.SecurityLevel(); got != gosnmp.AuthNoPriv {
+		t.Fatalf("security level: got %v, want AuthNoPriv", got)
+	}
+}
+
+func TestV3ConfigSecurityLevel(t *testing.T) {
+	cases := []struct {
+		name     string
+		cfg      V3Config
+		expected gosnmp.SnmpV3MsgFlags
+	}{
+		{"empty", V3Config{}, gosnmp.NoAuthNoPriv},
+		{"username only", V3Config{Username: "u"}, gosnmp.NoAuthNoPriv},
+		{"auth no priv", V3Config{Username: "u", AuthProtocol: gosnmp.SHA256, AuthPassword: "p"}, gosnmp.AuthNoPriv},
+		{"auth priv", V3Config{Username: "u", AuthProtocol: gosnmp.SHA256, AuthPassword: "p", PrivProtocol: gosnmp.AES, PrivPassword: "q"}, gosnmp.AuthPriv},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.cfg.SecurityLevel(); got != tc.expected {
+				t.Fatalf("got %v, want %v", got, tc.expected)
+			}
+		})
 	}
 }
