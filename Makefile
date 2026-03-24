@@ -3,7 +3,7 @@ BUILD_DIR  := build
 MODULE     := github.com/cblauvelt/snmp-trap-printer
 CMD        := ./cmd/$(BINARY)/...
 
-.PHONY: help build run test lint clean
+.PHONY: help build run test test-integration lint clean
 
 ## help: Show this help message
 help:
@@ -22,6 +22,10 @@ run: build
 ## test: Run all tests
 test:
 	go test ./...
+
+## test-integration: Run unit and integration tests
+test-integration:
+	go test -tags integration ./...
 
 ## lint: Run go vet
 lint:
