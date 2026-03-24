@@ -6,6 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `snmp-trap-printer` is a Go CLI tool that listens for SNMP traps (v1, v2c, v3) on a UDP port and prints them to stdout for troubleshooting and demo purposes. It supports human-readable labeled KV output and NDJSON output, with OID-to-name resolution via standard MIBs.
 
+## Pull Request Test Plans
+
+When writing the test plan section of a PR:
+- Only include tests that are already implemented as unit or integration tests in the codebase.
+- Do not add test plan items for tests that do not yet exist.
+- Mark every item with `[x]` (completed) after verifying the tests pass — the test plan informs reviewers that these checks have already been run.
+
 ## Git Conventions
 
 Commit messages follow the [Conventional Commits](https://www.conventionalcommits.org/) standard:
