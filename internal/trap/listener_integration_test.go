@@ -130,6 +130,82 @@ func TestListenerReceivesV1Trap(t *testing.T) {
 	_ = errCh
 }
 
+// TestListenerReceivesV3NoAuthNoPrivTrap verifies that a v3 noAuthNoPriv trap
+// is received and correctly parsed when no credentials are configured.
+func TestListenerReceivesV3NoAuthNoPrivTrap(t *testing.T) {
+	port := freeUDPPort(t)
+
+	received := make(chan *gosnmp.SnmpPacket, 1)
+	addrs := make(chan *net.UDPAddr, 1)
+
+	l, errCh := newTestListener(t, port, func(p *gosnmp.SnmpPacket, a *net.UDPAddr) {
+		received <- p
+		addrs <- a
+	})
+	defer l.Stop()
+
+	sender := &gosnmp.GoSNMP{
+		Target:        "127.0.0.1",
+		Port:          port,
+		Version:       gosnmp.Version3,
+		SecurityModel: gosnmp.UserSecurityModel,
+		MsgFlags:      gosnmp.NoAuthNoPriv,
+		SecurityParameters: &gosnmp.UsmSecurityParameters{
+			UserName:                 "testuser",
+			AuthoritativeEngineID:    string([]byte{0x80, 0x00, 0x00, 0x00, 0x01}),
+			AuthoritativeEngineBoots: 1,
+			AuthoritativeEngineTime:  1,
+		},
+		Timeout: 2 * time.Second,
+	}
+	if err := sender.Connect(); err != nil {
+		t.Fatalf("sender.Connect: %v", err)
+	}
+	defer sender.Conn.Close()
+
+	trapPDU := gosnmp.SnmpTrap{
+		Variables: []gosnmp.SnmpPDU{
+			{Name: ".1.3.6.1.2.1.1.3.0", Type: gosnmp.TimeTicks, Value: uint32(500)},
+			{Name: ".1.3.6.1.6.3.1.1.4.1.0", Type: gosnmp.ObjectIdentifier, Value: ".1.3.6.1.4.1.9.9.1"},
+			{Name: ".1.3.6.1.4.1.9.1.0", Type: gosnmp.Integer, Value: 42},
+		},
+	}
+	if _, err := sender.SendTrap(trapPDU); err != nil {
+		t.Fatalf("SendTrap: %v", err)
+	}
+
+	var pkt *gosnmp.SnmpPacket
+	var addr *net.UDPAddr
+	select {
+	case pkt = <-received:
+		addr = <-addrs
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for v3 trap")
+	}
+
+	parsed := trap.Dispatch(pkt, addr)
+	if parsed == nil {
+		t.Fatal("Dispatch returned nil")
+	}
+
+	if parsed.Version != gosnmp.Version3 {
+		t.Errorf("Version = %v, want Version3", parsed.Version)
+	}
+	if parsed.OID != ".1.3.6.1.4.1.9.9.1" {
+		t.Errorf("OID = %q, want %q", parsed.OID, ".1.3.6.1.4.1.9.9.1")
+	}
+	if parsed.Timestamp != 500 {
+		t.Errorf("Timestamp = %d, want 500", parsed.Timestamp)
+	}
+	if parsed.SecurityName != "testuser" {
+		t.Errorf("SecurityName = %q, want %q", parsed.SecurityName, "testuser")
+	}
+	if len(parsed.Varbinds) != 3 {
+		t.Errorf("len(Varbinds) = %d, want 3", len(parsed.Varbinds))
+	}
+	_ = errCh
+}
+
 // TestListenerStop_CleanShutdown verifies that Stop causes Start to return nil.
 func TestListenerStop_CleanShutdown(t *testing.T) {
 	port := freeUDPPort(t)
