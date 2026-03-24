@@ -33,9 +33,15 @@ fix(mib): handle missing OID suffix in Translate
 refactor(output): extract timetick formatting to shared helper
 ```
 
-## Branching
+## Branching & Pull Requests
 
-Branch names follow the pattern `{username}/issue{N}` — e.g., `cblauvelt/issue1`. Create one branch per GitHub issue.
+Branch names follow the pattern `{username}/issue{N}` — e.g., `cblauvelt/issue1`. Create one branch per GitHub issue. **Never commit directly to `main`.**
+
+Workflow for each issue:
+1. Create branch: `git checkout -b cblauvelt/issue{N}`
+2. Commit work on that branch
+3. Push and open a PR targeting `main`: `gh pr create --base main`
+4. The PR body should include `Closes #N` to auto-close the issue on merge
 
 ## Build & Run
 
