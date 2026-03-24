@@ -3,6 +3,7 @@ package config
 import (
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
@@ -17,6 +18,56 @@ const (
 	OutputJSON  OutputFormat = "json"
 )
 
+// V3Config holds SNMPv3 credentials loaded from environment variables.
+type V3Config struct {
+	Username     string
+	AuthProtocol gosnmp.SnmpV3AuthProtocol
+	AuthPassword string
+	PrivProtocol gosnmp.SnmpV3PrivProtocol
+	PrivPassword string
+}
+
+// SecurityLevel returns the appropriate SnmpV3MsgFlags based on which fields are populated.
+func (v *V3Config) SecurityLevel() gosnmp.SnmpV3MsgFlags {
+	if v.Username == "" || v.AuthProtocol == gosnmp.NoAuth || v.AuthProtocol == 0 {
+		return gosnmp.NoAuthNoPriv
+	}
+	if v.PrivProtocol == gosnmp.NoPriv || v.PrivProtocol == 0 {
+		return gosnmp.AuthNoPriv
+	}
+	return gosnmp.AuthPriv
+}
+
+// LoadV3Config reads SNMPv3 credentials from environment variables.
+// Invalid protocol strings log a warning and fall back to NoAuth/NoPriv.
+func LoadV3Config() (*V3Config, error) {
+	cfg := &V3Config{
+		Username:     os.Getenv("SNMP_V3_USERNAME"),
+		AuthPassword: os.Getenv("SNMP_V3_AUTH_PASSWORD"),
+		PrivPassword: os.Getenv("SNMP_V3_PRIV_PASSWORD"),
+		AuthProtocol: gosnmp.NoAuth,
+		PrivProtocol: gosnmp.NoPriv,
+	}
+
+	if authProto := os.Getenv("SNMP_V3_AUTH_PROTOCOL"); authProto != "" {
+		proto := parseAuthProtocol(authProto)
+		if proto == gosnmp.NoAuth {
+			log.Printf("warning: unknown SNMP_V3_AUTH_PROTOCOL %q, falling back to noAuthNoPriv", authProto)
+		}
+		cfg.AuthProtocol = proto
+	}
+
+	if privProto := os.Getenv("SNMP_V3_PRIV_PROTOCOL"); privProto != "" {
+		proto := parsePrivProtocol(privProto)
+		if proto == gosnmp.NoPriv {
+			log.Printf("warning: unknown SNMP_V3_PRIV_PROTOCOL %q, falling back to noPriv", privProto)
+		}
+		cfg.PrivProtocol = proto
+	}
+
+	return cfg, nil
+}
+
 // Config holds all runtime configuration derived from CLI flags and environment variables.
 type Config struct {
 	Address  string
@@ -24,13 +75,8 @@ type Config struct {
 	Output   OutputFormat
 	MIBPaths []string
 
-	// SNMPv3 credentials from environment variables
-	V3Username     string
-	V3AuthProtocol gosnmp.SnmpV3AuthProtocol
-	V3AuthPassword string
-	V3PrivProtocol gosnmp.SnmpV3PrivProtocol
-	V3PrivPassword string
-	V3SecurityLevel gosnmp.SnmpV3MsgFlags
+	// V3 holds SNMPv3 credentials loaded from environment variables.
+	V3 *V3Config
 }
 
 type mibPathList []string
@@ -71,12 +117,8 @@ func Parse() *Config {
 		os.Exit(2)
 	}
 
-	cfg.V3Username = os.Getenv("SNMP_V3_USERNAME")
-	cfg.V3AuthPassword = os.Getenv("SNMP_V3_AUTH_PASSWORD")
-	cfg.V3PrivPassword = os.Getenv("SNMP_V3_PRIV_PASSWORD")
-	cfg.V3AuthProtocol = parseAuthProtocol(os.Getenv("SNMP_V3_AUTH_PROTOCOL"))
-	cfg.V3PrivProtocol = parsePrivProtocol(os.Getenv("SNMP_V3_PRIV_PROTOCOL"))
-	cfg.V3SecurityLevel = inferSecurityLevel(cfg)
+	v3, _ := LoadV3Config()
+	cfg.V3 = v3
 
 	return cfg
 }
@@ -113,17 +155,4 @@ func parsePrivProtocol(s string) gosnmp.SnmpV3PrivProtocol {
 	default:
 		return gosnmp.NoPriv
 	}
-}
-
-func inferSecurityLevel(cfg *Config) gosnmp.SnmpV3MsgFlags {
-	if cfg.V3Username == "" {
-		return gosnmp.NoAuthNoPriv
-	}
-	if cfg.V3AuthProtocol == gosnmp.NoAuth {
-		return gosnmp.NoAuthNoPriv
-	}
-	if cfg.V3PrivProtocol == gosnmp.NoPriv {
-		return gosnmp.AuthNoPriv
-	}
-	return gosnmp.AuthPriv
 }

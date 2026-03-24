@@ -38,17 +38,17 @@ func main() {
 	}
 
 	var params *gosnmp.GoSNMP
-	if cfg.V3Username != "" {
+	if cfg.V3 != nil && cfg.V3.Username != "" {
 		params = &gosnmp.GoSNMP{
 			Version:       gosnmp.Version3,
 			SecurityModel: gosnmp.UserSecurityModel,
-			MsgFlags:      cfg.V3SecurityLevel,
+			MsgFlags:      cfg.V3.SecurityLevel(),
 			SecurityParameters: &gosnmp.UsmSecurityParameters{
-				UserName:                 cfg.V3Username,
-				AuthenticationProtocol:   cfg.V3AuthProtocol,
-				AuthenticationPassphrase: cfg.V3AuthPassword,
-				PrivacyProtocol:          cfg.V3PrivProtocol,
-				PrivacyPassphrase:        cfg.V3PrivPassword,
+				UserName:                 cfg.V3.Username,
+				AuthenticationProtocol:   cfg.V3.AuthProtocol,
+				AuthenticationPassphrase: cfg.V3.AuthPassword,
+				PrivacyProtocol:          cfg.V3.PrivProtocol,
+				PrivacyPassphrase:        cfg.V3.PrivPassword,
 			},
 		}
 	}
