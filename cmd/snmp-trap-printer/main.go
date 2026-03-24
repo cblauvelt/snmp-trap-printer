@@ -3,7 +3,10 @@ package main
 import (
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/cblauvelt/snmp-trap-printer/internal/config"
 	"github.com/cblauvelt/snmp-trap-printer/internal/mib"
@@ -25,8 +28,11 @@ func main() {
 		formatter = output.NewHumanFormatter()
 	}
 
-	handler := func(t *trap.Trap) {
-		// Resolve OID names for all varbinds.
+	handler := func(p *gosnmp.SnmpPacket, addr *net.UDPAddr) {
+		t := trap.Dispatch(p, addr)
+		if t == nil {
+			return
+		}
 		for i := range t.Varbinds {
 			if name, ok := loader.Translate(t.Varbinds[i].OID); ok {
 				t.Varbinds[i].Name = name
@@ -37,24 +43,16 @@ func main() {
 		}
 	}
 
-	var params *gosnmp.GoSNMP
-	if cfg.V3 != nil && cfg.V3.Username != "" {
-		params = &gosnmp.GoSNMP{
-			Version:       gosnmp.Version3,
-			SecurityModel: gosnmp.UserSecurityModel,
-			MsgFlags:      cfg.V3.SecurityLevel(),
-			SecurityParameters: &gosnmp.UsmSecurityParameters{
-				UserName:                 cfg.V3.Username,
-				AuthenticationProtocol:   cfg.V3.AuthProtocol,
-				AuthenticationPassphrase: cfg.V3.AuthPassword,
-				PrivacyProtocol:          cfg.V3.PrivProtocol,
-				PrivacyPassphrase:        cfg.V3.PrivPassword,
-			},
-		}
-	}
+	listener := trap.New(cfg, handler)
 
-	listener := trap.NewListener(cfg.Address, cfg.Port, params, handler)
-	if err := listener.Listen(); err != nil {
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		listener.Stop()
+	}()
+
+	if err := listener.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "listener error: %v\n", err)
 		os.Exit(1)
 	}
