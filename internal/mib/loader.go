@@ -63,7 +63,8 @@ func (l *Loader) LoadedModules() []string {
 }
 
 // Translate converts a dotted OID string to a human-readable MIB name.
-// Returns the original OID if not found.
+// Returns "MODULE::objectName.instance" for instance OIDs (e.g. sysDescr.0),
+// or the original OID string if no MIB node is found.
 func (l *Loader) Translate(oid string) (string, bool) {
 	oid = strings.TrimPrefix(oid, ".")
 	parsed, err := types.OidFromString(oid)
@@ -74,5 +75,10 @@ func (l *Loader) Translate(oid string) (string, bool) {
 	if err != nil {
 		return oid, false
 	}
-	return node.RenderQualified(), true
+	name := node.RenderQualified()
+	nodeOidStr := node.Oid.String()
+	if oid != nodeOidStr && strings.HasPrefix(oid, nodeOidStr+".") {
+		name += "." + oid[len(nodeOidStr)+1:]
+	}
+	return name, true
 }
