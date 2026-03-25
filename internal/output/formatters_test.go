@@ -69,16 +69,17 @@ func TestHumanFormatter_V1(t *testing.T) {
 
 	mustContain := []string{
 		divider,
+		"SNMP Trap Received",
 		"Version:    v1",
 		"Source:     10.0.0.10:55000",
 		"Community:  public",
 		"Enterprise: .1.3.6.1.4.1.9",
 		"Agent:      10.0.0.5",
-		"Generic:    6",
+		"enterpriseSpecific",
 		"Specific:   1",
-		"Timestamp:  6000 timeticks",
+		"6000 (1m0s)",
 		"Varbinds:",
-		"ciscoMgmt",     // resolved name used
+		"ciscoMgmt",          // resolved name used
 		".1.3.6.1.4.1.9.2.0", // raw OID for unresolved
 	}
 	for _, s := range mustContain {
@@ -107,7 +108,7 @@ func TestHumanFormatter_V2c(t *testing.T) {
 		"Version:    v2c",
 		"Trap OID:   .1.3.6.1.4.1.9.9.1",
 		"Community:  public",
-		"Timestamp:  360000 timeticks",
+		"360000 (1h0m0s)",
 	}
 	for _, s := range mustContain {
 		if !strings.Contains(out, s) {

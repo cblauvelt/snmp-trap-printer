@@ -3,12 +3,18 @@ package output
 import (
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/cblauvelt/snmp-trap-printer/internal/trap"
 	"github.com/gosnmp/gosnmp"
 )
 
-const divider = "--------------------------------------------------------------------------------"
+const divider = "================================================================================"
+
+var genericTrapNames = [...]string{
+	"coldStart", "warmStart", "linkDown", "linkUp",
+	"authenticationFailure", "egpNeighborLoss", "enterpriseSpecific",
+}
 
 // HumanFormatter writes labeled KV blocks to stdout, one per trap.
 type HumanFormatter struct{}
@@ -18,6 +24,8 @@ func NewHumanFormatter() *HumanFormatter { return &HumanFormatter{} }
 
 // Format writes a human-readable block for t.
 func (h *HumanFormatter) Format(w io.Writer, t *trap.Trap) error {
+	fmt.Fprintln(w, divider)
+	fmt.Fprintln(w, "SNMP Trap Received")
 	fmt.Fprintln(w, divider)
 	fmt.Fprintf(w, "Version:    %s\n", versionString(t.Version))
 	fmt.Fprintf(w, "Source:     %s\n", t.SourceIP)
@@ -32,11 +40,11 @@ func (h *HumanFormatter) Format(w io.Writer, t *trap.Trap) error {
 		fmt.Fprintf(w, "Agent:      %s\n", t.AgentAddress)
 	}
 	if t.Version == gosnmp.Version1 {
-		fmt.Fprintf(w, "Generic:    %d\n", t.GenericType)
+		fmt.Fprintf(w, "Generic:    %s (%d)\n", genericTrapName(t.GenericType), t.GenericType)
 		fmt.Fprintf(w, "Specific:   %d\n", t.SpecificType)
 	}
 	if t.Timestamp > 0 {
-		fmt.Fprintf(w, "Timestamp:  %d timeticks\n", t.Timestamp)
+		fmt.Fprintf(w, "Timestamp:  %s\n", formatTimeticks(t.Timestamp))
 	}
 	if t.OID != "" {
 		fmt.Fprintf(w, "Trap OID:   %s\n", t.OID)
@@ -50,7 +58,7 @@ func (h *HumanFormatter) Format(w io.Writer, t *trap.Trap) error {
 
 	if len(t.Varbinds) > 0 {
 		fmt.Fprintln(w, "Varbinds:")
-		for _, vb := range t.Varbinds {
+		for i, vb := range t.Varbinds {
 			name := vb.OID
 			if vb.Name != "" {
 				name = vb.Name
@@ -59,11 +67,23 @@ func (h *HumanFormatter) Format(w io.Writer, t *trap.Trap) error {
 			if val == "" {
 				val = fmt.Sprintf("%v", vb.Value)
 			}
-			fmt.Fprintf(w, "  %-40s %s\n", name, val)
+			fmt.Fprintf(w, "  [%d] %s (%s)\n      %s\n", i+1, name, berTypeName(vb.Type), val)
 		}
 	}
 	fmt.Fprintln(w, divider)
 	return nil
+}
+
+func formatTimeticks(ticks uint) string {
+	d := time.Duration(ticks) * 10 * time.Millisecond
+	return fmt.Sprintf("%d (%s)", ticks, d)
+}
+
+func genericTrapName(n int) string {
+	if n >= 0 && n < len(genericTrapNames) {
+		return genericTrapNames[n]
+	}
+	return fmt.Sprintf("%d", n)
 }
 
 func versionString(v gosnmp.SnmpVersion) string {
