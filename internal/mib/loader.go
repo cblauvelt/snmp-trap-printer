@@ -17,7 +17,7 @@ type Loader struct {
 // NewLoader initializes gosmi and loads MIBs from default + extra paths.
 func NewLoader(extraPaths []string) *Loader {
 	l := &Loader{
-		paths: resolvePaths(extraPaths),
+		paths: ResolveMIBPaths(extraPaths),
 	}
 
 	gosmi.Init()
