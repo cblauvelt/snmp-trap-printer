@@ -98,6 +98,41 @@ func TestParseOutputInvalid(t *testing.T) {
 	}
 }
 
+// TestParseOutputFormatEnvVar verifies that OUTPUT_FORMAT env var sets the output format.
+func TestParseOutputFormatEnvVar(t *testing.T) {
+	if os.Getenv("TEST_PARSE_OUTPUT_FORMAT_ENV") == "1" {
+		cfg := Parse()
+		if cfg.Output != OutputJSON {
+			t.Fatalf("output: got %q, want %q", cfg.Output, OutputJSON)
+		}
+		return
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=TestParseOutputFormatEnvVar")
+	cmd.Env = append(os.Environ(), "TEST_PARSE_OUTPUT_FORMAT_ENV=1", "OUTPUT_FORMAT=json")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("subprocess failed: %v\n%s", err, out)
+	}
+}
+
+// TestParseFlagOverridesOutputFormatEnvVar verifies that --output flag takes precedence over OUTPUT_FORMAT env var.
+func TestParseFlagOverridesOutputFormatEnvVar(t *testing.T) {
+	if os.Getenv("TEST_PARSE_FLAG_OVERRIDES_ENV") == "1" {
+		os.Args = []string{"snmp-trap-printer", "--output", "human"}
+		cfg := Parse()
+		if cfg.Output != OutputHuman {
+			t.Fatalf("output: got %q, want %q", cfg.Output, OutputHuman)
+		}
+		return
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=TestParseFlagOverridesOutputFormatEnvVar")
+	cmd.Env = append(os.Environ(), "TEST_PARSE_FLAG_OVERRIDES_ENV=1", "OUTPUT_FORMAT=json")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("subprocess failed: %v\n%s", err, out)
+	}
+}
+
 // TestParseMIBPaths verifies that --mib-path can be specified multiple times.
 func TestParseMIBPaths(t *testing.T) {
 	if os.Getenv("TEST_PARSE_MIB_PATHS") == "1" {

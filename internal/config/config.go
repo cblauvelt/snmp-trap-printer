@@ -100,7 +100,11 @@ func Parse() *Config {
 
 	flag.StringVar(&cfg.Address, "address", "0.0.0.0", "Bind address")
 	flag.UintVar(&port, "port", 162, "UDP port")
-	flag.StringVar(&output, "output", "human", "Output format: human or json")
+	outputDefault := os.Getenv("OUTPUT_FORMAT")
+	if outputDefault == "" {
+		outputDefault = string(OutputHuman)
+	}
+	flag.StringVar(&output, "output", outputDefault, fmt.Sprintf("Output format: %s or %s", OutputHuman, OutputJSON))
 	flag.Var(&mibPaths, "mib-path", "Extra MIB directory (repeatable)")
 	flag.Parse()
 
