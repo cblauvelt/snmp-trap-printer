@@ -45,6 +45,7 @@ func (l *Listener) Start() error {
 				PrivacyProtocol:          l.cfg.V3.PrivProtocol,
 				PrivacyPassphrase:        l.cfg.V3.PrivPassword,
 			},
+			Logger: gosnmp.NewLogger(slogAdapter{}),
 		}
 	}
 
