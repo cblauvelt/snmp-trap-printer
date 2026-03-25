@@ -33,6 +33,16 @@ fix(mib): handle missing OID suffix in Translate
 refactor(output): extract timetick formatting to shared helper
 ```
 
+## GitHub Issues
+
+Issue titles are plain human-readable text — do **not** use Conventional Commits type prefixes (`feat:`, `fix:`, etc.) in issue titles. Those prefixes are for commit messages only.
+
+Examples:
+```
+Add multi-stage Dockerfile to deploy directory
+Fix OID translation for v1 traps
+```
+
 ## Branching & Pull Requests
 
 Branch names follow the pattern `{username}/issue{N}` — e.g., `cblauvelt/issue1`. Create one branch per GitHub issue. **Never commit directly to `main`.**
