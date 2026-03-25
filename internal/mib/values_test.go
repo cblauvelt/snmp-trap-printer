@@ -5,6 +5,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/cblauvelt/snmp-trap-printer/internal/trap"
 	"github.com/gosnmp/gosnmp"
 )
 
@@ -15,15 +16,13 @@ func TestFormatTimeTicks(t *testing.T) {
 		ticks    uint32
 		expected string
 	}{
-		{0, "0 days, 00:00:00.00"},
-		{100, "0 days, 00:00:01.00"},   // 1 second
-		{99, "0 days, 00:00:00.99"},    // centiseconds only
-		{6000, "0 days, 00:01:00.00"},  // 1 minute
-		{6001, "0 days, 00:01:00.01"},  // 1 minute + 1 centisecond
-		{360000, "0 days, 01:00:00.00"}, // 1 hour
-		{8640000, "1 days, 00:00:00.00"}, // 1 day
-		{8640000 + 360000 + 6000 + 100, "1 days, 01:01:01.00"}, // 1 day, 1 hour, 1 min, 1 sec
-		{2*8640000 + 2*360000 + 2*6000 + 2*100 + 50, "2 days, 02:02:02.50"},
+		{0, "0 (0s)"},
+		{100, "100 (1s)"},
+		{99, "99 (990ms)"},
+		{6000, "6000 (1m0s)"},
+		{6001, "6001 (1m0.01s)"},
+		{360000, "360000 (1h0m0s)"},
+		{12345, "12345 (2m3.45s)"},
 	}
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("ticks=%d", tt.ticks), func(t *testing.T) {
@@ -58,7 +57,6 @@ func TestPrintableOrHex(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := printableOrHex(tt.input)
 			if tt.wantHex {
-				// Should start with "0x" for hex output
 				if len(got) < 2 || got[:2] != "0x" {
 					t.Errorf("printableOrHex(%v) = %q, want hex string starting with '0x'", tt.input, got)
 				}
@@ -103,43 +101,163 @@ func TestToUint32(t *testing.T) {
 	}
 }
 
-// --- FormatValue ---
+// --- toInt64 ---
+
+func TestToInt64(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     interface{}
+		wantOK    bool
+		wantValue int64
+	}{
+		{"int", int(42), true, 42},
+		{"int32", int32(-1), true, -1},
+		{"int64", int64(100), true, 100},
+		{"uint", uint(200), true, 200},
+		{"uint32", uint32(300), true, 300},
+		{"string", "42", false, 0},
+		{"float64", float64(3.14), false, 0},
+		{"nil", nil, false, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := toInt64(tt.input)
+			if ok != tt.wantOK {
+				t.Errorf("toInt64(%v) ok = %v, want %v", tt.input, ok, tt.wantOK)
+			}
+			if ok && got != tt.wantValue {
+				t.Errorf("toInt64(%v) = %d, want %d", tt.input, got, tt.wantValue)
+			}
+		})
+	}
+}
+
+// --- FormatValue (nil loader — no MIB enrichment) ---
 
 func TestFormatValue(t *testing.T) {
 	tests := []struct {
 		name     string
-		typ      gosnmp.Asn1BER
-		value    interface{}
+		vb       trap.Varbind
 		expected string
 	}{
 		// TimeTicks
-		{"TimeTicks zero", gosnmp.TimeTicks, uint32(0), "0 days, 00:00:00.00"},
-		{"TimeTicks 1 second", gosnmp.TimeTicks, uint32(100), "0 days, 00:00:01.00"},
-		{"TimeTicks uint", gosnmp.TimeTicks, uint(6000), "0 days, 00:01:00.00"},
-		{"TimeTicks wrong type falls through", gosnmp.TimeTicks, "bad", "bad"},
+		{
+			"TimeTicks zero",
+			trap.Varbind{Type: gosnmp.TimeTicks, Value: uint32(0)},
+			"0 (0s)",
+		},
+		{
+			"TimeTicks 1 second",
+			trap.Varbind{Type: gosnmp.TimeTicks, Value: uint32(100)},
+			"100 (1s)",
+		},
+		{
+			"TimeTicks uint",
+			trap.Varbind{Type: gosnmp.TimeTicks, Value: uint(6000)},
+			"6000 (1m0s)",
+		},
+		{
+			"TimeTicks wrong type falls through",
+			trap.Varbind{Type: gosnmp.TimeTicks, Value: "bad"},
+			"bad",
+		},
 
 		// OctetString
-		{"OctetString printable", gosnmp.OctetString, []byte("test"), "test"},
-		{"OctetString with null", gosnmp.OctetString, []byte{0x00}, "0x00"},
-		{"OctetString wrong type falls through", gosnmp.OctetString, 42, "42"},
+		{
+			"OctetString printable",
+			trap.Varbind{Type: gosnmp.OctetString, Value: []byte("test")},
+			"test",
+		},
+		{
+			"OctetString with null",
+			trap.Varbind{Type: gosnmp.OctetString, Value: []byte{0x00}},
+			"0x00",
+		},
+		{
+			"OctetString wrong type falls through",
+			trap.Varbind{Type: gosnmp.OctetString, Value: 42},
+			"42",
+		},
 
-		// ObjectIdentifier
-		{"ObjectIdentifier string", gosnmp.ObjectIdentifier, ".1.3.6.1.2", ".1.3.6.1.2"},
-		{"ObjectIdentifier wrong type falls through", gosnmp.ObjectIdentifier, 42, "42"},
+		// ObjectIdentifier (nil loader returns raw OID)
+		{
+			"ObjectIdentifier string",
+			trap.Varbind{Type: gosnmp.ObjectIdentifier, Value: ".1.3.6.1.2"},
+			".1.3.6.1.2",
+		},
+		{
+			"ObjectIdentifier wrong type falls through",
+			trap.Varbind{Type: gosnmp.ObjectIdentifier, Value: 42},
+			"42",
+		},
 
 		// IPAddress
-		{"IPAddress string", gosnmp.IPAddress, "192.168.1.1", "192.168.1.1"},
-		{"IPAddress wrong type falls through", gosnmp.IPAddress, 42, "42"},
+		{
+			"IPAddress string",
+			trap.Varbind{Type: gosnmp.IPAddress, Value: "192.168.1.1"},
+			"192.168.1.1",
+		},
+		{
+			"IPAddress wrong type falls through",
+			trap.Varbind{Type: gosnmp.IPAddress, Value: 42},
+			"42",
+		},
 
-		// Default (Integer, Counter32, etc.)
-		{"Integer default", gosnmp.Integer, int(99), "99"},
-		{"Counter32 default", gosnmp.Counter32, uint32(500), "500"},
+		// Integer (nil loader — no enum lookup)
+		{
+			"Integer default",
+			trap.Varbind{Type: gosnmp.Integer, Value: int(99)},
+			"99",
+		},
+
+		// Counter32
+		{
+			"Counter32 default",
+			trap.Varbind{Type: gosnmp.Counter32, Value: uint32(500)},
+			"500",
+		},
+
+		// Null
+		{
+			"Null",
+			trap.Varbind{Type: gosnmp.Null, Value: nil},
+			"null",
+		},
+
+		// Boolean
+		{
+			"Boolean true",
+			trap.Varbind{Type: gosnmp.Boolean, Value: true},
+			"true",
+		},
+		{
+			"Boolean false",
+			trap.Varbind{Type: gosnmp.Boolean, Value: false},
+			"false",
+		},
+		{
+			"Boolean wrong type falls through",
+			trap.Varbind{Type: gosnmp.Boolean, Value: int(1)},
+			"1",
+		},
+
+		// Opaque
+		{
+			"Opaque bytes",
+			trap.Varbind{Type: gosnmp.Opaque, Value: []byte{0xde, 0xad}},
+			"0xdead",
+		},
+		{
+			"Opaque wrong type falls through",
+			trap.Varbind{Type: gosnmp.Opaque, Value: "raw"},
+			"raw",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := FormatValue(tt.typ, tt.value)
+			got := FormatValue(nil, tt.vb)
 			if got != tt.expected {
-				t.Errorf("FormatValue(%v, %v) = %q, want %q", tt.typ, tt.value, got, tt.expected)
+				t.Errorf("FormatValue(nil, %+v) = %q, want %q", tt.vb, got, tt.expected)
 			}
 		})
 	}

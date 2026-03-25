@@ -37,6 +37,7 @@ func main() {
 			if name, ok := loader.Translate(t.Varbinds[i].OID); ok {
 				t.Varbinds[i].Name = name
 			}
+			t.Varbinds[i].FormattedValue = mib.FormatValue(loader, t.Varbinds[i])
 		}
 		if err := formatter.Format(os.Stdout, t); err != nil {
 			slog.Error("format error", "err", err)
