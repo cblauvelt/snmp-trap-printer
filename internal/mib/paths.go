@@ -4,10 +4,12 @@ import (
 	"log/slog"
 	"os"
 	"runtime"
+	"strings"
 )
 
-// defaultPaths returns OS-aware default MIB search directories.
-func defaultPaths() []string {
+// DefaultMIBPaths returns OS-appropriate default MIB search directories.
+// Only paths that exist on disk are returned.
+func DefaultMIBPaths() []string {
 	var candidates []string
 	switch runtime.GOOS {
 	case "linux":
@@ -31,11 +33,19 @@ func defaultPaths() []string {
 	return existingPaths(candidates)
 }
 
-// existingPaths filters a list to only paths that exist on disk.
+// ResolveMIBPaths merges extra CLI-supplied paths (prepended, higher priority)
+// with OS defaults, deduplicates, and returns only paths that exist on disk.
+func ResolveMIBPaths(extra []string) []string {
+	combined := append(existingPaths(extra), DefaultMIBPaths()...)
+	return deduplicate(combined)
+}
+
+// existingPaths filters a list to only paths that exist on disk, logging each result.
 func existingPaths(paths []string) []string {
 	var out []string
 	for _, p := range paths {
 		if _, err := os.Stat(p); err == nil {
+			slog.Debug("MIB path found", "path", p)
 			out = append(out, p)
 		} else {
 			slog.Debug("MIB path not found, skipping", "path", p)
@@ -44,8 +54,20 @@ func existingPaths(paths []string) []string {
 	return out
 }
 
-// resolvePaths merges default OS paths with any user-supplied extra paths,
-// returning only those that exist on disk.
-func resolvePaths(extra []string) []string {
-	return append(defaultPaths(), existingPaths(extra)...)
+// deduplicate removes duplicate paths, preserving order and first occurrence.
+// On Windows comparisons are case-insensitive; elsewhere they are case-sensitive.
+func deduplicate(paths []string) []string {
+	seen := make(map[string]struct{}, len(paths))
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		key := p
+		if runtime.GOOS == "windows" {
+			key = strings.ToLower(p)
+		}
+		if _, exists := seen[key]; !exists {
+			seen[key] = struct{}{}
+			out = append(out, p)
+		}
+	}
+	return out
 }
