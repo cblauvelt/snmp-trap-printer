@@ -1,0 +1,19 @@
+services:
+  snmp-trap-printer:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "10162:10162/udp"
+    restart: unless-stopped
+    environment:
+      - OUTPUT_FORMAT=${OUTPUT_FORMAT:-human}
+      - SNMP_V3_USERNAME=${SNMP_V3_USERNAME:-}
+      - SNMP_V3_AUTH_PROTOCOL=${SNMP_V3_AUTH_PROTOCOL:-}
+      - SNMP_V3_AUTH_PASSWORD=${SNMP_V3_AUTH_PASSWORD:-}
+      - SNMP_V3_PRIV_PROTOCOL=${SNMP_V3_PRIV_PROTOCOL:-}
+      - SNMP_V3_PRIV_PASSWORD=${SNMP_V3_PRIV_PASSWORD:-}
+    # To listen on the privileged port 162 on the host instead of 10162, change
+    # the port mapping above to "162:10162/udp" and add:
+    #   cap_add:
+    #     - NET_BIND_SERVICE

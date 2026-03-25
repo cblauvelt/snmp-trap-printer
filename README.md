@@ -86,6 +86,62 @@ export SNMP_V3_PRIV_PASSWORD=privsecret
 ./build/snmp-trap-printer --port 10162
 ```
 
+## MIBs
+
+Standard MIBs are loaded automatically from OS default paths if they exist:
+
+| OS | Paths |
+|----|-------|
+| Linux | `/usr/share/snmp/mibs`, `/usr/local/share/snmp/mibs` |
+| macOS | `/usr/local/share/snmp/mibs`, `/opt/homebrew/share/snmp/mibs` |
+| Windows | `C:\usr\mibs`, `%APPDATA%\snmp\mibs` |
+
+If no MIBs are found, the tool runs normally and displays raw numeric OIDs and values instead of names.
+
+Install standard MIBs:
+```bash
+# macOS
+brew install net-snmp
+
+# Debian / Ubuntu
+sudo apt-get install snmp-mibs-downloader
+sudo download-mibs
+```
+
+## Docker
+
+A `deploy/docker-compose.yml` is provided for running the container without building manually. The image bundles standard MIBs from `deploy/files/` — host MIB paths are not used.
+
+```bash
+# Human output (default), listening on UDP 10162
+cd deploy && docker compose up
+
+# JSON (NDJSON) output
+cd deploy && OUTPUT_FORMAT=json docker compose up
+
+# SNMPv3 authPriv with JSON output
+cd deploy && OUTPUT_FORMAT=json \
+  SNMP_V3_USERNAME=trapuser \
+  SNMP_V3_AUTH_PROTOCOL=SHA256 \
+  SNMP_V3_AUTH_PASSWORD=authsecret \
+  SNMP_V3_PRIV_PROTOCOL=AES \
+  SNMP_V3_PRIV_PASSWORD=privsecret \
+  docker compose up
+```
+
+To listen on the privileged port 162 on the host, change the port mapping in `docker-compose.yml` to `"162:10162/udp"` and add `cap_add: [NET_BIND_SERVICE]`.
+
+To load additional MIBs, mount a directory into the container and pass `--mib-path` via the `command` override:
+
+```yaml
+services:
+  snmp-trap-printer:
+    # ...
+    volumes:
+      - /path/to/your/mibs:/mibs:ro
+    command: ["--port", "10162", "--mib-path", "/mibs"]
+```
+
 ## Sending sample traps
 
 The examples below use `snmptrap` from the [net-snmp](http://www.net-snmp.org/) package.
@@ -175,26 +231,4 @@ One JSON object per line (NDJSON), suitable for piping to `jq` or ingestion by l
 Filter with `jq`:
 ```bash
 ./build/snmp-trap-printer --port 10162 --output json | jq '.varbinds[] | {name, value}'
-```
-
-## MIBs
-
-Standard MIBs are loaded automatically from OS default paths if they exist:
-
-| OS | Paths |
-|----|-------|
-| Linux | `/usr/share/snmp/mibs`, `/usr/local/share/snmp/mibs` |
-| macOS | `/usr/local/share/snmp/mibs`, `/opt/homebrew/share/snmp/mibs` |
-| Windows | `C:\usr\mibs`, `%APPDATA%\snmp\mibs` |
-
-If no MIBs are found, the tool runs normally and displays raw numeric OIDs and values instead of names.
-
-Install standard MIBs:
-```bash
-# macOS
-brew install net-snmp
-
-# Debian / Ubuntu
-sudo apt-get install snmp-mibs-downloader
-sudo download-mibs
 ```
