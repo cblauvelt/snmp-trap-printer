@@ -3,7 +3,7 @@ BUILD_DIR  := build
 MODULE     := github.com/cblauvelt/snmp-trap-printer
 CMD        := ./cmd/$(BINARY)/...
 
-.PHONY: help build run test test-integration lint clean
+.PHONY: help build docker run test test-integration lint clean
 
 ## help: Show this help message
 help:
@@ -14,6 +14,10 @@ help:
 ## build: Compile the binary to build/
 build:
 	go build -o $(BUILD_DIR)/$(BINARY) $(CMD)
+
+## docker: Build the Docker image and tag as latest
+docker:
+	docker build -f deploy/Dockerfile -t $(BINARY):latest .
 
 ## run: Build and run with --port 10162 (no sudo required)
 run: build
