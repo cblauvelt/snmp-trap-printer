@@ -28,10 +28,15 @@ func freeUDPPort(t *testing.T) uint16 {
 
 func newTestListener(t *testing.T, port uint16, handler trap.TrapHandler) (*trap.Listener, chan error) {
 	t.Helper()
+	return newTestListenerWithV3(t, port, &config.V3Config{}, handler)
+}
+
+func newTestListenerWithV3(t *testing.T, port uint16, v3 *config.V3Config, handler trap.TrapHandler) (*trap.Listener, chan error) {
+	t.Helper()
 	cfg := &config.Config{
 		Address: "127.0.0.1",
 		Port:    port,
-		V3:      &config.V3Config{},
+		V3:      v3,
 	}
 	l := trap.New(cfg, handler)
 	errCh := make(chan error, 1)
@@ -250,4 +255,166 @@ func TestListenerBindConflict(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Error("second listener did not return a bind error within timeout")
 	}
+}
+
+// TestListenerReceivesV3AuthNoPrivTrap verifies that a v3 authNoPriv trap
+// is authenticated and delivered when credentials match.
+func TestListenerReceivesV3AuthNoPrivTrap(t *testing.T) {
+	port := freeUDPPort(t)
+
+	received := make(chan *gosnmp.SnmpPacket, 1)
+	addrs := make(chan *net.UDPAddr, 1)
+
+	v3cfg := &config.V3Config{
+		Username:     "testuser",
+		AuthProtocol: gosnmp.MD5,
+		AuthPassword: "testpassword1",
+	}
+	l, errCh := newTestListenerWithV3(t, port, v3cfg, func(p *gosnmp.SnmpPacket, a *net.UDPAddr) {
+		received <- p
+		addrs <- a
+	})
+	defer l.Stop()
+
+	sender := &gosnmp.GoSNMP{
+		Target:        "127.0.0.1",
+		Port:          port,
+		Version:       gosnmp.Version3,
+		SecurityModel: gosnmp.UserSecurityModel,
+		MsgFlags:      gosnmp.AuthNoPriv,
+		SecurityParameters: &gosnmp.UsmSecurityParameters{
+			UserName:                 "testuser",
+			AuthenticationProtocol:   gosnmp.MD5,
+			AuthenticationPassphrase: "testpassword1",
+			AuthoritativeEngineID:    string([]byte{0x80, 0x00, 0x00, 0x00, 0x01}),
+			AuthoritativeEngineBoots: 1,
+			AuthoritativeEngineTime:  1,
+		},
+		Timeout: 2 * time.Second,
+	}
+	if err := sender.Connect(); err != nil {
+		t.Fatalf("sender.Connect: %v", err)
+	}
+	defer sender.Conn.Close()
+
+	trapPDU := gosnmp.SnmpTrap{
+		Variables: []gosnmp.SnmpPDU{
+			{Name: ".1.3.6.1.2.1.1.3.0", Type: gosnmp.TimeTicks, Value: uint32(700)},
+			{Name: ".1.3.6.1.6.3.1.1.4.1.0", Type: gosnmp.ObjectIdentifier, Value: ".1.3.6.1.4.1.9.9.2"},
+			{Name: ".1.3.6.1.4.1.9.1.0", Type: gosnmp.Integer, Value: 77},
+		},
+	}
+	if _, err := sender.SendTrap(trapPDU); err != nil {
+		t.Fatalf("SendTrap: %v", err)
+	}
+
+	var pkt *gosnmp.SnmpPacket
+	var addr *net.UDPAddr
+	select {
+	case pkt = <-received:
+		addr = <-addrs
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for authNoPriv v3 trap")
+	}
+
+	parsed := trap.Dispatch(pkt, addr)
+	if parsed == nil {
+		t.Fatal("Dispatch returned nil")
+	}
+	if parsed.Version != gosnmp.Version3 {
+		t.Errorf("Version = %v, want Version3", parsed.Version)
+	}
+	if parsed.SecurityName != "testuser" {
+		t.Errorf("SecurityName = %q, want %q", parsed.SecurityName, "testuser")
+	}
+	if parsed.OID != ".1.3.6.1.4.1.9.9.2" {
+		t.Errorf("OID = %q, want %q", parsed.OID, ".1.3.6.1.4.1.9.9.2")
+	}
+	if parsed.Timestamp != 700 {
+		t.Errorf("Timestamp = %d, want 700", parsed.Timestamp)
+	}
+	_ = errCh
+}
+
+// TestListenerReceivesV3AuthPrivTrap verifies that a v3 authPriv trap
+// is authenticated, decrypted, and delivered when credentials match.
+func TestListenerReceivesV3AuthPrivTrap(t *testing.T) {
+	port := freeUDPPort(t)
+
+	received := make(chan *gosnmp.SnmpPacket, 1)
+	addrs := make(chan *net.UDPAddr, 1)
+
+	v3cfg := &config.V3Config{
+		Username:     "testuser",
+		AuthProtocol: gosnmp.MD5,
+		AuthPassword: "testpassword1",
+		PrivProtocol: gosnmp.AES,
+		PrivPassword: "testpassword2",
+	}
+	l, errCh := newTestListenerWithV3(t, port, v3cfg, func(p *gosnmp.SnmpPacket, a *net.UDPAddr) {
+		received <- p
+		addrs <- a
+	})
+	defer l.Stop()
+
+	sender := &gosnmp.GoSNMP{
+		Target:        "127.0.0.1",
+		Port:          port,
+		Version:       gosnmp.Version3,
+		SecurityModel: gosnmp.UserSecurityModel,
+		MsgFlags:      gosnmp.AuthPriv,
+		SecurityParameters: &gosnmp.UsmSecurityParameters{
+			UserName:                 "testuser",
+			AuthenticationProtocol:   gosnmp.MD5,
+			AuthenticationPassphrase: "testpassword1",
+			PrivacyProtocol:          gosnmp.AES,
+			PrivacyPassphrase:        "testpassword2",
+			AuthoritativeEngineID:    string([]byte{0x80, 0x00, 0x00, 0x00, 0x01}),
+			AuthoritativeEngineBoots: 1,
+			AuthoritativeEngineTime:  1,
+		},
+		Timeout: 2 * time.Second,
+	}
+	if err := sender.Connect(); err != nil {
+		t.Fatalf("sender.Connect: %v", err)
+	}
+	defer sender.Conn.Close()
+
+	trapPDU := gosnmp.SnmpTrap{
+		Variables: []gosnmp.SnmpPDU{
+			{Name: ".1.3.6.1.2.1.1.3.0", Type: gosnmp.TimeTicks, Value: uint32(900)},
+			{Name: ".1.3.6.1.6.3.1.1.4.1.0", Type: gosnmp.ObjectIdentifier, Value: ".1.3.6.1.4.1.9.9.3"},
+			{Name: ".1.3.6.1.4.1.9.1.0", Type: gosnmp.Integer, Value: 55},
+		},
+	}
+	if _, err := sender.SendTrap(trapPDU); err != nil {
+		t.Fatalf("SendTrap: %v", err)
+	}
+
+	var pkt *gosnmp.SnmpPacket
+	var addr *net.UDPAddr
+	select {
+	case pkt = <-received:
+		addr = <-addrs
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for authPriv v3 trap")
+	}
+
+	parsed := trap.Dispatch(pkt, addr)
+	if parsed == nil {
+		t.Fatal("Dispatch returned nil")
+	}
+	if parsed.Version != gosnmp.Version3 {
+		t.Errorf("Version = %v, want Version3", parsed.Version)
+	}
+	if parsed.SecurityName != "testuser" {
+		t.Errorf("SecurityName = %q, want %q", parsed.SecurityName, "testuser")
+	}
+	if parsed.OID != ".1.3.6.1.4.1.9.9.3" {
+		t.Errorf("OID = %q, want %q", parsed.OID, ".1.3.6.1.4.1.9.9.3")
+	}
+	if parsed.Timestamp != 900 {
+		t.Errorf("Timestamp = %d, want 900", parsed.Timestamp)
+	}
+	_ = errCh
 }
