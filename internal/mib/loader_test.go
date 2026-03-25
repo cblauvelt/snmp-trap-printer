@@ -86,6 +86,33 @@ func TestTranslate_NoMIBsLoaded_FallsBackToWellKnown(t *testing.T) {
 	}
 }
 
+func TestTranslate_ScalarInstance(t *testing.T) {
+	l := NewLoader([]string{testdataMIBs})
+
+	// sysDescr.0 — scalar instance OID; base node is 1.3.6.1.2.1.1.1
+	name, ok := l.Translate("1.3.6.1.2.1.1.1.0")
+	if !ok {
+		t.Fatal("expected Translate to find OID 1.3.6.1.2.1.1.1.0")
+	}
+	if name != "SNMPv2-MIB::sysDescr.0" {
+		t.Errorf("Translate(1.3.6.1.2.1.1.1.0) = %q, want %q", name, "SNMPv2-MIB::sysDescr.0")
+	}
+}
+
+func TestTranslate_TabularInstance(t *testing.T) {
+	l := NewLoader([]string{testdataMIBs})
+
+	// ifDescr.1 — tabular instance OID; base node is 1.3.6.1.2.1.2.2.1.2
+	name, ok := l.Translate("1.3.6.1.2.1.2.2.1.2.1")
+	if !ok {
+		t.Fatal("expected Translate to find OID 1.3.6.1.2.1.2.2.1.2.1")
+	}
+	// RFC1213-MIB defines ifDescr at the same OID; either qualifier is valid.
+	if name != "IF-MIB::ifDescr.1" && name != "RFC1213-MIB::ifDescr.1" {
+		t.Errorf("Translate(1.3.6.1.2.1.2.2.1.2.1) = %q, want IF-MIB::ifDescr.1 or RFC1213-MIB::ifDescr.1", name)
+	}
+}
+
 func TestTranslate_UnknownOID(t *testing.T) {
 	l := NewLoader([]string{testdataMIBs})
 
