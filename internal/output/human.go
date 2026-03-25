@@ -55,7 +55,11 @@ func (h *HumanFormatter) Format(w io.Writer, t *trap.Trap) error {
 			if vb.Name != "" {
 				name = vb.Name
 			}
-			fmt.Fprintf(w, "  %-40s %v\n", name, vb.Value)
+			val := vb.FormattedValue
+			if val == "" {
+				val = fmt.Sprintf("%v", vb.Value)
+			}
+			fmt.Fprintf(w, "  %-40s %s\n", name, val)
 		}
 	}
 	fmt.Fprintln(w, divider)

@@ -4,10 +4,11 @@ import "github.com/gosnmp/gosnmp"
 
 // Varbind is a single variable binding from an SNMP trap PDU.
 type Varbind struct {
-	OID   string
-	Name  string // resolved name; empty if OID not found in MIB
-	Type  gosnmp.Asn1BER
-	Value interface{}
+	OID            string
+	Name           string // resolved name; empty if OID not found in MIB
+	FormattedValue string // human-readable value string; empty until enriched
+	Type           gosnmp.Asn1BER
+	Value          interface{}
 }
 
 // Trap is the version-neutral representation of a received SNMP trap.

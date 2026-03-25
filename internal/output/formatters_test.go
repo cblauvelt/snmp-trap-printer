@@ -213,6 +213,28 @@ func TestHumanFormatter_ReturnsNilError(t *testing.T) {
 	}
 }
 
+func TestHumanFormatter_UsesFormattedValue(t *testing.T) {
+	var buf bytes.Buffer
+	f := NewHumanFormatter()
+	tr := &trap.Trap{
+		Version:  gosnmp.Version2c,
+		SourceIP: "10.0.0.1:162",
+		Varbinds: []trap.Varbind{
+			{OID: ".1.3.6", Name: "sysName", FormattedValue: "up(1)", Type: gosnmp.Integer, Value: 1},
+			{OID: ".1.3.6.1", Name: "", FormattedValue: "", Type: gosnmp.Integer, Value: 99},
+		},
+	}
+	f.Format(&buf, tr)
+	out := buf.String()
+
+	if !strings.Contains(out, "up(1)") {
+		t.Errorf("output should use FormattedValue when set, got:\n%s", out)
+	}
+	if !strings.Contains(out, "99") {
+		t.Errorf("output should fall back to Value when FormattedValue is empty, got:\n%s", out)
+	}
+}
+
 // --- JSONFormatter ---
 
 func TestJSONFormatter_V1(t *testing.T) {
@@ -339,6 +361,39 @@ func TestJSONFormatter_ReturnsNilError(t *testing.T) {
 	err := f.Format(&buf, v1Trap())
 	if err != nil {
 		t.Errorf("Format returned non-nil error: %v", err)
+	}
+}
+
+func TestJSONFormatter_UsesFormattedValue(t *testing.T) {
+	var buf bytes.Buffer
+	f := NewJSONFormatter()
+	tr := &trap.Trap{
+		Version:  gosnmp.Version2c,
+		SourceIP: "10.0.0.1:162",
+		Varbinds: []trap.Varbind{
+			{OID: ".1.3.6", Name: "ifOperStatus", FormattedValue: "up", Type: gosnmp.Integer, Value: 1},
+			{OID: ".1.3.6.1", Name: "", FormattedValue: "", Type: gosnmp.Integer, Value: 99},
+		},
+	}
+	f.Format(&buf, tr)
+
+	var m map[string]interface{}
+	if err := json.Unmarshal(buf.Bytes(), &m); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	vbs, _ := m["varbinds"].([]interface{})
+	if len(vbs) != 2 {
+		t.Fatalf("expected 2 varbinds, got %d", len(vbs))
+	}
+
+	vb0, _ := vbs[0].(map[string]interface{})
+	if vb0["value"] != "up" {
+		t.Errorf("varbind[0].value = %v, want %q", vb0["value"], "up")
+	}
+
+	vb1, _ := vbs[1].(map[string]interface{})
+	if vb1["value"] != "99" {
+		t.Errorf("varbind[1].value = %v, want %q", vb1["value"], "99")
 	}
 }
 

@@ -2,6 +2,7 @@ package output
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 
 	"github.com/cblauvelt/snmp-trap-printer/internal/trap"
@@ -31,10 +32,10 @@ type jsonTrap struct {
 }
 
 type jsonVarbind struct {
-	OID   string      `json:"oid"`
-	Name  string      `json:"name,omitempty"`
-	Type  string      `json:"type"`
-	Value interface{} `json:"value"`
+	OID   string `json:"oid"`
+	Name  string `json:"name,omitempty"`
+	Type  string `json:"type"`
+	Value string `json:"value"`
 }
 
 // Format encodes t as a single JSON line.
@@ -54,11 +55,15 @@ func (j *JSONFormatter) Format(w io.Writer, t *trap.Trap) error {
 		ContextEngineID: t.ContextEngineID,
 	}
 	for _, vb := range t.Varbinds {
+		val := vb.FormattedValue
+		if val == "" {
+			val = fmt.Sprintf("%v", vb.Value)
+		}
 		jt.Varbinds = append(jt.Varbinds, jsonVarbind{
 			OID:   vb.OID,
 			Name:  vb.Name,
 			Type:  berTypeName(vb.Type),
-			Value: vb.Value,
+			Value: val,
 		})
 	}
 	enc := json.NewEncoder(w)
