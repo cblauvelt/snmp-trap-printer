@@ -15,12 +15,6 @@ FROM gcr.io/distroless/static-debian12
 COPY --from=build /snmp-trap-printer /snmp-trap-printer
 COPY deploy/files/ /usr/share/snmp/mibs/
 
-ENV SNMP_V3_USERNAME=""
-ENV SNMP_V3_AUTH_PROTOCOL=""
-ENV SNMP_V3_AUTH_PASSWORD=""
-ENV SNMP_V3_PRIV_PROTOCOL=""
-ENV SNMP_V3_PRIV_PASSWORD=""
-
 EXPOSE 10162/udp
 
 ENTRYPOINT ["/snmp-trap-printer"]

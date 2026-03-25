@@ -33,6 +33,7 @@ func New(cfg *config.Config, handler TrapHandler) *Listener {
 // It returns an error immediately if the listener fails to bind.
 func (l *Listener) Start() error {
 	params := gosnmp.Default
+	params.Logger = gosnmp.NewLogger(slogAdapter{})
 	if l.cfg.V3 != nil {
 		params = &gosnmp.GoSNMP{
 			Version:       gosnmp.Version3,
