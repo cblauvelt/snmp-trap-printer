@@ -3,6 +3,8 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+      tags:
+        - cblauvelt/snmp-trap-printer
     ports:
       - "10162:10162/udp"
     restart: unless-stopped

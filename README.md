@@ -110,6 +110,51 @@ sudo download-mibs
 
 ## Docker
 
+### Pull from Docker Hub
+
+Pre-built images are published to [Docker Hub](https://hub.docker.com/r/cblauvelt/snmp-trap-printer) for `linux/amd64` and `linux/arm64`.
+
+```bash
+docker pull cblauvelt/snmp-trap-printer:latest
+```
+
+#### Basic usage
+
+```bash
+# Human output, listening on UDP 10162
+docker run --rm -p 10162:10162/udp cblauvelt/snmp-trap-printer:latest
+
+# JSON (NDJSON) output
+docker run --rm -p 10162:10162/udp \
+  -e OUTPUT_FORMAT=json \
+  cblauvelt/snmp-trap-printer:latest
+```
+
+#### With a custom MIB directory
+
+Mount a host directory into the container and pass `--mib-path` to load additional MIBs:
+
+```bash
+docker run --rm -p 10162:10162/udp \
+  -v /path/to/your/mibs:/mibs:ro \
+  cblauvelt/snmp-trap-printer:latest \
+  --port 10162 --mib-path /mibs
+```
+
+The `--mib-path` flag is repeatable if you have MIBs spread across multiple directories:
+
+```bash
+docker run --rm -p 10162:10162/udp \
+  -v /opt/vendor/mibs:/vendor-mibs:ro \
+  -v /opt/local/mibs:/local-mibs:ro \
+  cblauvelt/snmp-trap-printer:latest \
+  --port 10162 --mib-path /vendor-mibs --mib-path /local-mibs
+```
+
+The image already bundles standard MIBs (IF-MIB, IP-MIB, SNMPv2-MIB, etc.) — you only need to mount a directory when you have device- or vendor-specific MIBs beyond the defaults.
+
+### docker-compose
+
 A `deploy/docker-compose.yml` is provided for running the container without building manually. The image bundles standard MIBs from `deploy/files/` — host MIB paths are not used.
 
 ```bash

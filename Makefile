@@ -17,7 +17,7 @@ build:
 
 ## docker: Build the Docker image and tag as latest
 docker:
-	docker build -f deploy/Dockerfile -t $(BINARY):latest .
+	docker build -f deploy/Dockerfile -t cblauvelt/$(BINARY):latest .
 
 ## run: Build and run with --port 10162 (no sudo required)
 run: build
